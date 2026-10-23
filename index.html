@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anime & Manga Info</title>
+<style>
+:root{--bg:#f4f5f9;--card:#fff;--tx:#1c1f2a;--mu:#6b7080;--ac:#5b5bf0}
+@media(prefers-color-scheme:dark){:root{--bg:#12141c;--card:#1c1f2b;--tx:#eceef6;--mu:#9aa0b4}}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+header{position:sticky;top:0;background:var(--bg);padding:14px;z-index:5}
+h1{margin:0 0 10px;font-size:20px}
+.row{display:flex;gap:8px}
+input{flex:1;padding:12px;border-radius:12px;border:1px solid #8884;background:var(--card);color:var(--tx);font-size:16px}
+button,select{padding:12px 14px;border-radius:12px;border:0;background:var(--ac);color:#fff;font-size:16px}
+select{background:var(--card);color:var(--tx);border:1px solid #8884}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;padding:14px}
+.c{background:var(--card);border-radius:14px;overflow:hidden;cursor:pointer}
+.c img{width:100%;aspect-ratio:2/3;object-fit:cover;display:block}
+.c div{padding:8px;font-size:14px}
+.c small{color:var(--mu)}
+#m{position:fixed;inset:0;background:#000a;display:none;align-items:flex-end;justify-content:center;z-index:10}
+#m.on{display:flex}
+#box{background:var(--card);width:100%;max-width:700px;max-height:88vh;overflow:auto;border-radius:20px 20px 0 0;padding:16px}
+#box img{width:120px;border-radius:10px;float:left;margin:0 14px 8px 0}
+.t{display:inline-block;background:#8882;border-radius:20px;padding:3px 10px;margin:2px;font-size:13px}
+.msg{padding:20px;text-align:center;color:var(--mu)}
+</style>
+</head>
+<body>
+<header>
+<h1>🎌 Anime & Manga Info</h1>
+<div class="row">
+<input id="q" placeholder="নাম লিখে সার্চ করুন…" enterkeyhint="search">
+<select id="t"><option value="ANIME">Anime</option><option value="MANGA">Manga</option></select>
+<button id="go">খুঁজুন</button>
+</div>
+</header>
+<div id="grid"></div>
+<div id="m"><div id="box"></div></div>
+<script>
+const API="https://graphql.anilist.co";
+const F="id title{romaji english native} coverImage{large extraLarge} averageScore status format episodes chapters volumes genres description(asHtml:false) startDate{year} season studios(isMain:true){nodes{name}} siteUrl";
+async function gql(query,variables){
+  const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query,variables})});
+  const j=await r.json();if(j.errors)throw new Error(j.errors[0].message);return j.data;
+}
+const grid=document.getElementById("grid"),modal=document.getElementById("m"),box=document.getElementById("box");
+let items=[];
+function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function name(x){return x.title.english||x.title.romaji}
+function show(list){
+  items=list;
+  if(!list.length){grid.innerHTML='<div class="msg">কিছু পাওয়া যায়নি।</div>';return}
+  grid.innerHTML=list.map((x,i)=>`<div class="c" onclick="detail(${i})"><img loading="lazy" src="${x.coverImage.large}" alt=""><div>${esc(name(x))}<br><small>⭐ ${x.averageScore??"–"} · ${x.format??""}</small></div></div>`).join("");
+}
+async function load(search){
+  grid.innerHTML='<div class="msg">লোড হচ্ছে…</div>';
+  const type=document.getElementById("t").value;
+  try{
+    const d=await gql(`query($s:String,$t:MediaType){Page(perPage:30){media(search:$s,type:$t,sort:${search?"SEARCH_MATCH":"TRENDING_DESC"}){${F}}}}`,{s:search||undefined,t:type});
+    show(d.Page.media);
+  }catch(e){grid.innerHTML='<div class="msg">সমস্যা হয়েছে: '+esc(e.message)+'</div>'}
+}
+function detail(i){
+  const x=items[i];
+  const len=x.episodes?x.episodes+" episodes":x.chapters?x.chapters+" chapters":"–";
+  const st=x.studios?.nodes?.map(s=>s.name).join(", ");
+  box.innerHTML=`<img src="${x.coverImage.extraLarge||x.coverImage.large}" alt="">
+  <h2 style="margin:0">${esc(name(x))}</h2><small>${esc(x.title.native||"")}</small>
+  <p>⭐ ${x.averageScore??"–"}/100 · ${esc(x.format||"")} · ${esc(x.status||"")} · ${len}${x.startDate.year?" · "+x.startDate.year:""}${st?"<br>Studio: "+esc(st):""}</p>
+  <div style="clear:both"></div>
+  <div>${(x.genres||[]).map(g=>`<span class="t">${esc(g)}</span>`).join("")}</div>
+  <p>${esc((x.description||"কোনো বিবরণ নেই।").replace(/<br\s*\/?>/gi,"\n")).replace(/&lt;[^&]*?&gt;/g,"")}</p>
+  <p><a href="${x.siteUrl}" target="_blank" rel="noopener">AniList এ দেখুন ↗</a></p>`;
+  modal.classList.add("on");
+}
+modal.onclick=e=>{if(e.target===modal)modal.classList.remove("on")};
+document.getElementById("go").onclick=()=>load(document.getElementById("q").value.trim());
+document.getElementById("q").onkeydown=e=>{if(e.key==="Enter")document.getElementById("go").click()};
+document.getElementById("t").onchange=()=>document.getElementById("go").click();
+load("");
+</script>
+</body>
+</html>
